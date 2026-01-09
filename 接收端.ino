@@ -53,6 +53,9 @@ struct sensordata{
   int location;
   int L;
   int R;
+  String name;
+  String unit;
+  int floor;
   long upgradetime;
 };
 list<sensordata> sensors;
@@ -283,7 +286,7 @@ void setup(){
 	pinMode(LED, OUTPUT);
 	pinMode(LEDL, OUTPUT);
 	pinMode(LEDR, OUTPUT);
-	pinMode(switcher, INPUT);
+	pinMode(switcher, OUTPUT);
 
 		/*SD卡首次初始化过程*/
 		// 初始化SPI并设置引脚
@@ -327,50 +330,45 @@ void loop(){
     long S=millis();
     while(millis()-S < 100){//等待期间做这些
       mesh.update(); // 保持Mesh网络运行
-      if(digitalRead(switcher)){//检验单片机是否工作,如果工作按下蜂鸣
-        bool TO=false;
-		    for(auto &a:sensors){
-          if(millis()-a.upgradetime>2000){//信息不在2s内更新
-            TO=true;
-          }
-          mesh.update();
+      bool TO=false;
+		  for(auto &a:sensors){
+        if(millis()-a.upgradetime>2000){//信息不在2s内更新
+          TO=true;
+          break;
         }
-        if(!TO/*sensors.size() > 0*/){
-          for(int i=1;i<5000;i++){//蜂鸣
+        mesh.update();
+      }
+      mesh.update();
+      if(TO){
+        for(int n=0;n<5;n++){
+          for(int i=1;i<2000;i++){//闪烁
             digitalWrite(buzzer,HIGH);
             mesh.update();
+          }
+          for(int i=1;i<2000;i++){//闪烁
             digitalWrite(buzzer,LOW);
             mesh.update();
           }
-        }else{
-          for(int n=0;n<5;n++){
-            for(int i=1;i<2000;i++){//蜂鸣
-              digitalWrite(buzzer,HIGH);
-              mesh.update();
-              digitalWrite(buzzer,LOW);
-              mesh.update();
-            }
-            for(int i=1;i<2500;i++){//蜂鸣
-              mesh.update();
-            }
-          }
         }
-      }else{
-        digitalWrite(buzzer, LOW);
       }
     }
+    mesh.update();
     S=millis();
     bool mL=false;
     bool mR=false;
     bool HaveTimeOut=false;
+    bool InfCanUse=false;
 		for(auto &a:sensors){
       if(millis()-a.upgradetime<=ValidTime){//信息在有效时间内
         if(a.L) mL=true;
         if(a.R) mR=true;
+        if(a.location>=location-1 || a.location<=location+1) InfCanUse=true;
       }else{
         HaveTimeOut=true;
       }
+      mesh.update();
     }
+    mesh.update();
     //亮灯提示
     if(mL){
       digitalWrite(LEDL,HIGH);
@@ -388,18 +386,18 @@ void loop(){
     }else{
       digitalWrite(LED,HIGH);
     }
+    if(InfCanUse){
+      digitalWrite(switcher,LOW);
+    }else{
+      digitalWrite(switcher,HIGH);
+    }
+    mesh.update();
     if(HaveTimeOut){//存在过时消息
       mesh.update();
       sensors.remove_if([](struct sensordata a) {
         return millis()-a.upgradetime > ValidTime; // 定义删除条件：如果过时则删除
       });
       mesh.update();
-      for(int i=1;i<5000;i++){//报警
-        digitalWrite(buzzer,HIGH);
-        mesh.update();
-        digitalWrite(buzzer,LOW);
-        mesh.update();
-      }
     }
 	}
   if(EnableSD && people){

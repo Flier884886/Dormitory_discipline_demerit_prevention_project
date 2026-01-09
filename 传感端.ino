@@ -228,17 +228,36 @@ bool GetBrightness(){
 }
 
 
-void TaskIntime(){//定时任务
+bool TaskIntime(bool send){//定时任务,返回值是否有人
   bool L=digitalRead(sensorL);
 	bool R=digitalRead(sensorR);
-  std::stringstream ss;
-	ss <<L << " " << R;
-	std::string text=ss.str();
-  Serial.println(text.c_str());
-  SendPeopleMsg(L,R);//广播探测的消息
+  mesh.update();
+  if(L || R){//有人
+    std::stringstream ss;
+	  ss <<L << " " << R;
+	  std::string text=ss.str();
+    Serial.println(text.c_str());
+    SendPeopleMsg(L,R);//广播探测的消息
+    mesh.update();
+    return true;
+  }else{
+    if(send){
+      std::stringstream ss;
+	    ss <<L << " " << R;
+	    std::string text=ss.str();
+      Serial.println(text.c_str());
+      SendPeopleMsg(L,R);//广播探测的消息
+    }
+    mesh.update();
+    return false;
+  }
+  return false;
 }
-Task SendPeopleMessage(TASK_SECOND * 0.5, TASK_FOREVER, &TaskIntime);
 
+void TaskInTimeVoid(){
+  TaskIntime(true);
+}
+Task SendPeopleMessage(TASK_SECOND * 0.5, TASK_FOREVER, &TaskInTimeVoid);
 
 void setup(){
 	Serial.begin(9600);//启用串口通信
@@ -293,6 +312,7 @@ void loop(){
 	bool people=false;
 	for(int i=0;i<mainlooptimes;i++){//高频操作写在循环体内
     long S=millis();
+    bool sent=false;
     while(millis()-S < 500){//等待期间做这些
       mesh.update(); // 核心：保持网络运行
       if(digitalRead(switcher)){//检验单片机是否工作,如果工作按下亮灯
@@ -300,14 +320,11 @@ void loop(){
       }else{
         digitalWrite(LED, HIGH);
       }
+      if(!sent) sent=TaskIntime(false);//更及时的响应
+      mesh.update();
     }
-    S=millis();
-    TaskIntime();
-		bool L=digitalRead(sensorL);
-		bool R=digitalRead(sensorR);
-		if(L || R){
-      people=true;
-    }
+    people = people || TaskIntime(true);
+    mesh.update();
 	}
   if(EnableSD && people){
 		std::stringstream ss;
